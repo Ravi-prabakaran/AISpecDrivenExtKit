@@ -14,6 +14,10 @@ const DEFAULT_BASE_BRANCH = 'develop';
 // Azure DevOps sign-in scope (a fixed Microsoft ID for Azure DevOps, same for everyone)
 const ADO_SCOPE = '499b84ac-1321-427f-aa17-267ca6975798/.default';
 
+// Workspace file and the shared folder for AI assets
+const WORKSPACE_FILE = 'dh-champion.code-workspace';
+const ASSETS_FOLDER = 'dh-champion';
+
 // Key used to remember the last chosen folder
 const LAST_FOLDER_KEY = 'dhChampion.lastSetupFolder';
 
@@ -81,6 +85,31 @@ async function cloneRepo(repo: Repo, folder: string, token: string): Promise<Clo
     log.appendLine(`✖ ${repo.name}: ${message}`);
     return { repo, status: 'failed' };
   }
+}
+
+// Creates the shared assets folder and writes the multi-root workspace file.
+// The workspace file is generated, so it is rewritten every time Setup runs.
+function writeWorkspaceFile(folder: string, repos: Repo[]): string {
+  const assetsPath = path.join(folder, ASSETS_FOLDER);
+  fs.mkdirSync(assetsPath, { recursive: true });
+
+  const readme = path.join(assetsPath, 'README.md');
+  if (!fs.existsSync(readme)) {
+    fs.writeFileSync(readme, '# DH Champion\n\nShared AI assets for spec driven development.\n', 'utf8');
+  }
+
+  const workspace = {
+    folders: [
+      { name: 'DH Champion (AI assets)', path: ASSETS_FOLDER },
+      ...repos.map(r => ({ name: r.name, path: r.name }))
+    ],
+    settings: {}
+  };
+
+  const workspacePath = path.join(folder, WORKSPACE_FILE);
+  fs.writeFileSync(workspacePath, JSON.stringify(workspace, null, 2), 'utf8');
+  log.appendLine(`✔ Workspace file written: ${workspacePath}`);
+  return workspacePath;
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -217,7 +246,7 @@ export function activate(context: vscode.ExtensionContext) {
     // 6. Clone the repositories
     log.show(true);
     log.appendLine('');
-    log.appendLine(`=== DH Champion setup: cloning into ${folder} ===`);
+    log.appendLine(`=== DH Champion setup: ${folder} ===`);
 
     const results = await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: 'DH Champion' },
@@ -232,7 +261,11 @@ export function activate(context: vscode.ExtensionContext) {
       }
     );
 
-    // 7. Summary
+    // 7. Build the workspace
+    const workspacePath = writeWorkspaceFile(folder, repos);
+    log.appendLine('=== Done ===');
+
+    // 8. Summary, then open the workspace
     const summary = results.map(r =>
       r.status === 'cloned' ? `✔ ${r.repo.name}: cloned`
       : r.status === 'skipped' ? `↷ ${r.repo.name}: already there, skipped`
@@ -240,12 +273,27 @@ export function activate(context: vscode.ExtensionContext) {
     );
     const anyFailed = results.some(r => r.status === 'failed');
 
-    log.appendLine(`=== Done ===`);
-
-    await vscode.window.showInformationMessage(
-      anyFailed ? 'DH Champion: setup finished with errors' : 'DH Champion: repositories ready',
-      { modal: true, detail: [`Folder: ${folder}`, '', ...summary].join('\n') }
+    const openChoice = await vscode.window.showInformationMessage(
+      anyFailed ? 'DH Champion: setup finished with errors' : 'DH Champion: workspace ready',
+      {
+        modal: true,
+        detail: [
+          `Folder: ${folder}`,
+          '',
+          ...summary,
+          '',
+          `Workspace: ${WORKSPACE_FILE}`
+        ].join('\n')
+      },
+      'Open Workspace'
     );
+
+    if (openChoice === 'Open Workspace') {
+      // This reloads the window, so nothing after this line runs.
+      await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(workspacePath), {
+        forceNewWindow: false
+      });
+    }
   });
 
   context.subscriptions.push(setup);
