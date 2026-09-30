@@ -1,220 +1,157 @@
-Here's the full structure, with what goes where and why.
+# DH Champion
 
-MM.DigitalHub.AIKnowledgeHub/
-├── .github/
-│   ├── copilot-instructions.md        always on, keep under ~50 lines
-│   ├── dh-context.default.md          fallback copy
-│   ├── dh-context.md                  generated, gitignored
-│   ├── instructions/                  auto-attach by file pattern
-│   ├── skills/                        the /dh-* commands
-│   └── agents/                        personas with restricted tools
-├── knowledge/                         your spike analyses
-├── templates/                         story, spec, plan, PR formats
-└── README.md
-.github/instructions/ — the highest value, least effort
+Sets up your AI-driven development environment in one command: the repositories, the MCP
+servers, and the shared Copilot skills and knowledge base. Everyone on the team ends up
+with an identical setup.
 
-These attach automatically based on the files being edited. No command, no developer action. This is where your brand-id guardrail belongs.
+Allow about 15 minutes for the first run. After that it takes under a minute.
 
-brand-aware-data.instructions.md    applyTo: **/Repositories/**, **/DataAccess/**, **/*.sql, **/Migrations/**
-api-conventions.instructions.md     applyTo: **/Controllers/**, **/*Controller.cs
-ui-conventions.instructions.md      applyTo: **/*.tsx, **/*.ts, **/*.razor
-test-conventions.instructions.md    applyTo: **/*Tests.cs, **/*.spec.ts
-iac-conventions.instructions.md     applyTo: **/*.bicep, **/*.tf
-pipeline-conventions.instructions.md applyTo: **/azure-pipelines*.yml
+## What it does
 
-Each is short and links to knowledge/, never duplicates it.
+Running **DH Champion: Setup** will:
 
-.github/skills/ — your command set
-dh-story/         work item -> tech story in Azure DevOps
-dh-spec/          story -> specification
-dh-plan/          spec -> implementation plan
-dh-branch/        create the feature branch          (done)
-dh-implement/     work the plan
-dh-test/          write and run tests
-dh-commit/        commit with your message convention
-dh-pr/            push and open the PR
-dh-review/        review a diff against standards
-dh-brand-check/   audit a change for missing BrandId
+- Check your prerequisites and tell you what is missing
+- Sign you in with your Microsoft work account
+- Clone the DigitalHub repositories, each on its correct base branch
+- Install our shared Copilot skills, instructions and knowledge base
+- Configure the Azure DevOps and Microsoft Learn MCP servers
+- Open everything as a single workspace
 
-That last one is specific to your migration and probably your most valuable command. It's a focused audit: given a diff, check every insert against the brand-aware table list.
+Run it again any time to pick up updated skills. Repositories you already have are skipped.
 
-.github/agents/ — only two
-dh-analyst.agent.md       read-only: reads code and ADO, writes stories/specs/plans,
-                          cannot edit files or run git
-dh-implementer.agent.md   full access, used during the build phase
+## Before you start
 
-The value is the restriction on the analyst, which makes "understand before you change" structural rather than advisory. Resist adding more until you feel a specific need.
-
-knowledge/ — your spike output
-knowledge/
-├── README.md                          index: what's here, what each doc covers
-├── architecture/
-│   ├── system-overview.md
-│   └── repo-map.md                    which repo does what
-├── database/
-│   ├── brand-aware-tables.md          your spike output
-│   ├── insert-points-by-repo.md       your spike output
-│   └── migration-approach.md
-├── domain/
-│   └── glossary.md                    enrollment terms, acquisition terms
-├── api/
-├── ui/
-├── azure/
-└── cicd/
-
-Two conventions worth enforcing from day one:
-
-Every doc opens with a one-paragraph summary of what it covers and when to consult it. That's what lets an agent decide whether to read further.
-
-knowledge/README.md is an index, and copilot-instructions.md links to it. Without an index, the agent doesn't know these documents exist.
-
-templates/
-tech-story.md    spec.md    plan.md    pr-description.md    commit-message.md
-
-Skills reference these instead of embedding formats, so changing your PR template doesn't mean editing three skills.
-
-Build order
-
-Don't create all of this at once. Empty folders and thin documents actively mislead the agent.
-
-knowledge/database/ + brand-aware-data.instructions.md. Your existing spike output, plus the instruction file. Test it by opening a repository class and asking for an insert.
-knowledge/README.md and architecture/repo-map.md. Gives the agent a map.
-dh-pr and dh-commit. Completes the loop a developer uses daily.
-The two agents.
-dh-story, dh-spec, dh-plan. The spec-driven core, last because it needs the most iteration.
-The failure mode to avoid
-
-Over-building. Ten mediocre skills are worse than three good ones: they crowd the / menu, dilute tool selection, and nobody trusts any of them. The skill description field is what decides whether it gets triggered, so each one needs a genuinely distinct purpose.
-
-Want me to draft brand-aware-data.instructions.md and the knowledge/README.md structure as concrete starting points? Those two set the pattern everything else follows.
-
-yes please
-
-Drafting a solution around the likely .NET and Azure setup.
-
-Three files. The first two are the pattern; the third shows the format your spike output needs to take.
-
-1. .github/instructions/brand-aware-data.instructions.md
-markdown
----
-applyTo: "**/Repositories/**,**/DataAccess/**,**/Migrations/**,**/*.sql,**/Entities/**,**/Models/**"
-description: Brand-awareness rules for data access, applied when editing data or schema code.
----
-
-# Brand-aware data access
-
-We are integrating an acquired company's application into DigitalHub. Most database
-tables now carry a `BrandId` that identifies which brand a row belongs to. Missing it
-silently mixes data between brands, which is a correctness and compliance problem.
-
-## Before changing data access code
-
-1. Check whether the table is brand-aware: see
-   [brand-aware tables](../../knowledge/database/brand-aware-tables.md).
-2. If you are adding a new insert, check
-   [known insert points](../../knowledge/database/insert-points-by-repo.md)
-   for how this repository already handles it, and follow the same pattern.
-
-## Rules
-
-- Every INSERT into a brand-aware table must set `BrandId` explicitly.
-  Never rely on a database default, and never leave it null.
-- Every SELECT, UPDATE and DELETE against a brand-aware table must filter by `BrandId`
-  unless the operation is deliberately cross-brand. If it is, say so in a comment.
-- New tables holding brand-specific data must include `BrandId` as a non-nullable column.
-- Never infer the brand from the data. Take it from the request or ambient context
-  as the repository already does.
-
-## When you are unsure
-
-If a table is not on the list, stop and ask rather than guessing. The list may be
-out of date, and adding a missing BrandId later is far more expensive than asking now.
-
-If you find an insert into a brand-aware table that does not set BrandId, flag it to
-the developer even when it is outside the scope of the current change.
-
-Two things to note. The applyTo globs are a guess at your layout, so adjust them to your actual folder names; getting these right is the difference between the instruction firing and being dead weight. And the last paragraph matters more than it looks: it turns the agent into something that finds existing bugs, not just avoids new ones.
-
-2. knowledge/README.md
-markdown
-# DigitalHub knowledge base
-
-Analysis and reference documents about our systems, written for both people and
-AI agents. Copilot consults these when working in the DigitalHub repositories.
-
-## How to use this folder
-
-- Each document starts with a summary saying what it covers and when to consult it.
-- Documents are the source of truth for the facts they state. If code and a document
-  disagree, the document is stale: fix it in the same pull request.
-- Keep documents factual. Conventions and rules belong in `.github/instructions/`,
-  which links here.
-
-## Contents
-
-### Database
-- [Brand-aware tables](database/brand-aware-tables.md) — which tables carry `BrandId`,
-  and which deliberately do not.
-- [Insert points by repository](database/insert-points-by-repo.md) — every place we
-  insert into brand-aware tables, and which repository owns it.
-- [Migration approach](database/migration-approach.md) — how the brand-awareness
-  rollout is sequenced.
-
-### Architecture
-- [Repository map](architecture/repo-map.md) — what each DigitalHub repository does.
-- [System overview](architecture/system-overview.md) — how the services fit together.
-
-### Domain
-- [Glossary](domain/glossary.md) — enrollment and acquisition terms, and what they mean here.
-
-## Adding a document
-
-1. Put it in the right folder, or create one with a clear name.
-2. Start with a summary paragraph.
-3. Add it to the list above. A document not listed here will not be found.
-4. Raise a pull request. These documents change how Copilot behaves for the whole team.
-
-Point 3 is the one people will skip. Without the index entry, the agent has no way to discover the file.
-
-3. knowledge/database/brand-aware-tables.md
-
-This is the format your spike output should land in:
-
-markdown
-# Brand-aware tables
-
-Which database tables carry `BrandId`, and which do not. Consult this before writing
-or changing any insert, update or schema change.
-
-Last reviewed: 2026-09-30 by <name>. Source: Spike <work item id>.
-
-## Brand-aware tables
-
-These tables have a non-nullable `BrandId`. Every insert must set it, and every read
-must filter by it unless deliberately cross-brand.
-
-| Table | Schema | Notes |
+| | Why | Check with |
 | --- | --- | --- |
-| Enrollment | dbo | BrandId set from the enrolling user's brand context |
-| Member | dbo | |
-| ... | | |
+| **Git** 2.31+ | Cloning the repositories | `git --version` |
+| **Node.js** 20+ | Running the Azure DevOps MCP server | `node --version` |
+| **Azure CLI** (recommended) | Sign in once instead of being prompted later | `az --version` |
+| **GitHub Copilot** | Signed in, agent mode available | Open Copilot Chat |
 
-## Tables that are deliberately not brand-aware
+Azure CLI is optional but worth installing first. Without it, the Azure DevOps MCP server
+asks you to sign in through a browser the first time you use it in chat. With it, you sign
+in once during setup and never again.
+Get it from <https://aka.ms/installazurecliwindows>.
 
-These are shared across brands by design. Adding `BrandId` to them would be wrong.
+## Getting started
 
-| Table | Schema | Why |
-| --- | --- | --- |
-| Country | ref | Reference data, identical for all brands |
-| ... | | |
+1. Press `Ctrl+Shift+P` and run **DH Champion: Setup**.
+2. Review what will be set up, then click **Continue**.
+3. Check the prerequisites screen. Git is required; the rest are warnings you can proceed
+   past.
+4. Sign in with your Microsoft work account when prompted.
+5. Confirm the repositories were found. Setup verifies each one exists before cloning.
+6. Sign in to Azure when prompted. This happens once.
+7. Choose a folder, for example `C:\Work\DigitalHub`. Pick an empty one.
+8. Wait while the repositories clone. Detail appears in **Output → DH Champion**.
+9. Click **Open Workspace**.
 
-## Not yet migrated
+## Checking it worked
 
-Tables that should become brand-aware but have not been changed yet. Treat with care:
-check the current schema before assuming.
+**Explorer** shows `ai-hub` plus each repository as separate top-level folders.
 
-| Table | Schema | Tracking item |
-| --- | --- | --- |
-| ... | | |
+**Source Control** lists all the repositories. If it shows nothing, run
+**Developer: Reload Window**; VS Code does not always notice repositories that appeared
+while it was running.
 
-The three-way split is the important part. A list of brand-aware tables alone leaves the agent guessing about everything absent from it. Saying explicitly this one is intentionally shared and this one isn't done yet removes the ambiguity, and the third section is where mistakes actually happen.
+**Copilot Chat:** switch the mode dropdown to **Agent** (MCP tools do not work in Ask mode),
+type `/` and look for the `dh-` commands.
+
+Then run **DH Champion: Doctor**. It checks everything and opens a report.
+
+## Using it
+
+### Starting work on a story
+
+In Copilot Chat, in Agent mode:
+
+```
+/dh-branch 1226224
+```
+
+It reads the work item from Azure DevOps, builds a branch name from our convention, and
+creates the branch from the correct base branch for that repository.
+
+Copilot asks permission before running each git command. "Allow in this session" is
+reasonable; it will ask again next time you open VS Code.
+
+### Rules that apply automatically
+
+Some guidance attaches itself based on the file you are editing, with no command needed.
+Opening a data-access class brings in our brand-awareness rules, so Copilot knows which
+tables require `BrandId`. You do not need to do anything for this to work.
+
+### Staying up to date
+
+The skills and knowledge base live in a repository that changes as the team improves them.
+Run **DH Champion: Setup** again to pick up the latest. Worth doing every week or two;
+Doctor will tell you when you are behind.
+
+### Where the skills come from
+
+The skills, instructions and knowledge base live in **MM.DigitalHub.AIKnowledgeHub**. They
+are cloned into the `ai-hub` folder of your workspace, so you can read exactly what Copilot
+is being told.
+
+Improvements are welcome. Raise a pull request against `master`: a clearer skill, a
+correction to a knowledge document, or a new analysis worth sharing. Everyone picks it up
+the next time they run Setup.
+
+Do not edit the files in `ai-hub` locally. Setup overwrites them, so your change would only
+affect you, and only until the next run.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `DH Champion: Setup` | Runs the full setup, or updates an existing workspace |
+| `DH Champion: Doctor` | Checks everything and produces a diagnostic report |
+
+## Settings
+
+Search for `DH Champion` in Settings.
+
+| Setting | What it controls |
+| --- | --- |
+| `dhChampion.repositories` | Which repositories to clone, and each one's base branch |
+| `dhChampion.branchPattern` | Feature branch naming convention |
+| `dhChampion.mcpServers` | Which MCP servers to configure |
+| `dhChampion.sharedRepository` | Where the shared AI assets come from |
+
+The defaults are correct for most people. Changes apply to your machine only.
+
+## Common problems
+
+**Repositories or MCP servers missing after setup**
+Run **Developer: Reload Window**. This fixes it more often than anything else.
+
+**Two sets of Azure DevOps tools in chat**
+You had your own MCP configuration before installing this. Both are active, which confuses
+the agent. Run **MCP: List Servers**, find your original `azure-devops` entry, and disable
+it for this workspace. Your other projects are unaffected. Setup warns you when it detects
+this.
+
+**An MCP server will not start**
+Run **MCP: List Servers**, select the failing server, and choose **Show Output**. Usually
+Node.js is missing, or the corporate proxy is blocking the npm registry.
+
+**A repository failed to clone**
+Check **Output → DH Champion**. Usually the configured base branch does not exist in that
+repository, or you lack access to it in Azure DevOps.
+
+**Setup cannot reach the shared repository**
+Check you have access to MM.DigitalHub.AIKnowledgeHub in Azure DevOps. If it is a wider
+outage, you can clone that repo yourself and copy its `.github` folder into your workspace,
+renaming `dh-context.default.md` to `dh-context.md`. Please report it so it gets fixed
+properly rather than leaving everyone on manual copies.
+
+**Copilot is not following our conventions**
+Check you are in **Agent** mode, not Ask mode. Then run Doctor to confirm the shared assets
+are present and current.
+
+## Getting help
+
+Run **DH Champion: Doctor**, click **Copy Report**, and paste it with your question. It
+contains almost everything needed to diagnose a problem.
+
+Contact: *<add your name or team channel here>*
